@@ -2,24 +2,27 @@
 
 import sys
 import os.path
+import argparse
 import regex  # [:upper:]
 
+no_capital_letters = frozenset([''])
+
 pIsPi = \
-    '\u000AB' +\
-    '\u02018' +\
-    '\u0201B' +\
-    '\u0201C' +\
-    '\u0201F' +\
-    '\u02039' +\
-    '\u02E02' +\
-    '\u02E04' +\
-    '\u02E09' +\
-    '\u02E0C' +\
-    '\u02E1C' +\
-    '\u02E20'
+ '\u000AB' +\
+ '\u02018' +\
+ '\u0201B' +\
+ '\u0201C' +\
+ '\u0201F' +\
+ '\u02039' +\
+ '\u02E02' +\
+ '\u02E04' +\
+ '\u02E09' +\
+ '\u02E0C' +\
+ '\u02E1C' +\
+ '\u02E20'
 
 pIsPf = \
-    '\u000BB' +\
+ '\u000BB' +\
 '\u02019' +\
 '\u0201D' +\
 '\u0203A' +\
@@ -31,60 +34,27 @@ pIsPf = \
 '\u02E21'
 
 def subst_char_class(rule):
-    rule = rule.replace(r'\p{IsPf}', pIsPf)
-    rule = rule.replace(r'\p{IsPi}', pIsPi)
-    rule = rule.replace(r'\p{IsAlnum}', r'[:alnum:]')
-    rule = rule.replace(r'\p{IsUpper}', r'[:upper:]')
-    return rule
+   rule = rule.replace(r'\p{IsPf}', pIsPf)
+   rule = rule.replace(r'\p{IsPi}', pIsPi)
+   rule = rule.replace(r'\p{IsAlnum}', r'[:alnum:]')
+   rule = rule.replace(r'\p{IsUpper}', r'[:upper:]')
+   return rule
     #res
 
+###################### Prefix file utilities ####################
 
-def getprefixfile(language):
-    mydir = "nonbreaking_prefixes"
-    prefixfile = os.path.join(os.path.dirname(__file__), mydir, "nonbreaking_prefix." + language)
-    return prefixfile
-
-NONBREAKING_PREFIX = {}
-language = "en"
-QUIET = False
-HELP = False
-
-argc = 0
-while argc < len(sys.argv):
-    arg = sys.argv[argc]
-    if arg == '-l':
-        if argc == len(sys.argv) - 1:
-            print('No language specified')
-            exit(-1)
-        language = sys.argv[argc + 1]
-        argc += 1
-    elif arg == '-q':
-        QUIET = True
-    elif arg == '-h':
-        HELP = True
-    argc += 1
+def get_prefix_filename(language):
+   prefixfile = getprefixfile(language)
+   #default back to English if we don't have a language-specific prefix file
+   if not os.path.isfile(prefixfile):
+       prefixfile = getprefixfile("en");
+       print ( "WARNING: No known abbreviations for language '$language', attempting fall-back to English version...\n")
+       if not os.path.isfile(prefixfile):
+           raise RuntimeError("ERROR: No abbreviations files found in " + prefixfile)
+   return prefixfile
 
 
-if HELP:
-    print("Usage ./split.py (-l [en|de|...]) < textfile > splitfile\n")
-    exit(0)
-
-if not QUIET:
-	print ( "Sentence Splitter v3")
-	print ( "Language: ", language)
-
-
-prefixfile = getprefixfile(language)
-#default back to English if we don't have a language-specific prefix file
-if not os.path.isfile(prefixfile):
-    prefixfile = getprefixfile("en");
-    print ( "WARNING: No known abbreviations for language '$language', attempting fall-back to English version...\n")
-    if not os.path.isfile(prefixfile):
-        print ("ERROR: No abbreviations files found in " + prefixfile)
-        exit(-1)
-
-
-def getprefixcontents(prefixfile):
+def load_prefix_file(prefixfile):
     NONBREAKING_PREFIX = {}
     with open(prefixfile, encoding='utf8') as file:
         for line in file.readlines():
@@ -97,22 +67,29 @@ def getprefixcontents(prefixfile):
                     NONBREAKING_PREFIX[line] = 1
     return NONBREAKING_PREFIX
 
-NONBREAKING_PREFIX = getprefixcontents(prefixfile)
+def getprefixfile(language):
+    mydir = "nonbreaking_prefixes"
+    prefixfile = os.path.join(os.path.dirname(__file__), mydir, "nonbreaking_prefix." + language)
+    return prefixfile
 
+################################################################################
 
+class SentenceSplitter:
+   def __init__(self, language):
+      name = get_prefix_filename(language)
+      self.NONBREAKING_PREFIX = load_prefix_file(name)
 
-def process_string(text):
-    lines = text.split('\n')
-    return process_lines(lines)
+   def process_string(self, text):
+       lines = text.split('\n')
+       return process_lines(lines, self.NONBREAKING_PREFIX)
 
-def process_file(file_name):
-    lines = []
-    with open(file_name, encoding='r') as file:
-        lines = file.readlines()
+   def process_file(self, file_name):
+       lines = []
+       with open(file_name, mode='r', encoding='utf8') as file:
+           lines = file.readlines()
+       return process_lines(lines, self.NONBREAKING_PREFIX)
 
-    return process_lines(lines)
-
-def process_lines(lines):
+def process_lines(lines, NONBREAKING_PREFIX):
     ##loop text, add lines together until we get a blank line or a <p>
     out_text = ''
     re_tag = regex.compile('^<.+>$')
@@ -125,8 +102,8 @@ def process_lines(lines):
 
         if m is not None:
             #time to process this block, we've hit a blank or <p>
-            out_text += do_it_for(text, line)
-            if regex.match('^\s*$') and len(text): ##if we have text followed by <P>
+            out_text += do_it_for(text, line, NONBREAKING_PREFIX)
+            if regex.match('^\s*$', line) and len(text): ##if we have text followed by <P>
                 out_text += "<P>\n"
                 text = ""
         else:
@@ -135,19 +112,19 @@ def process_lines(lines):
 
     #do the leftover text
     if len(text):
-        out_text += do_it_for(text, "")
+        out_text += do_it_for(text, "", NONBREAKING_PREFIX)
     return out_text
 
 
-def do_it_for(text, markup):
-    result = preprocess(text)
+def do_it_for(text, markup, NONBREAKING_PREFIX):
+    result = preprocess(text, NONBREAKING_PREFIX)
     if len(text):
         return result
     if re_tag.match(markup):
         return markup + "\n"
     return ''
 
-def preprocess(text):
+def preprocess(text, NONBREAKING_PREFIX):
 	# clean up spaces at head and tail of each line as well as any double-spacing
     text = regex.sub(' +', ' ', text)
     text = regex.sub('\n ', '\n', text)
@@ -160,16 +137,16 @@ def preprocess(text):
 	#####add sentence breaks as needed#####
 
 	#non-period end of sentence markers (?!) followed by sentence starters.
-    text = regex.sub (subst_char_class(r'([?!]) +([\'\"\(\[\¿\¡\p{IsPi}]*[\p{IsUpper}])'), '\1\n\2', text, regex.UNICODE)
+    text = regex.sub (subst_char_class(r'([?!]) +([\'\"\(\[\¿\¡\p{IsPi}]*[\p{IsUpper}])'), r'\1\n\2', text, regex.UNICODE)
 
 	#multi-dots followed by sentence starters
-    text = regex.sub (subst_char_class(r'(\.[\.]+) +([\'\"\(\[\¿\¡\p{IsPi}]*[\p{IsUpper}])'), '\1\n\2', text, regex.UNICODE)
+    text = regex.sub (subst_char_class(r'(\.[\.]+) +([\'\"\(\[\¿\¡\p{IsPi}]*[\p{IsUpper}])'), r'\1\n\2', text, regex.UNICODE)
 
 	# add breaks for sentences that end with some sort of punctuation inside a quote or parenthetical and are followed by a possible sentence starter punctuation and upper case
-    text = regex.sub (subst_char_class(r'([?!\.][\ ]*[\'\"\)\]\p{IsPf}]+) +([\'\"\(\[\¿\¡\p{IsPi}]*[\ ]*[\p{IsUpper}])'), '\1\n\2', text, regex.UNICODE)
+    text = regex.sub (subst_char_class(r'([?!\.][\ ]*[\'\"\)\]\p{IsPf}]+) +([\'\"\(\[\¿\¡\p{IsPi}]*[\ ]*[\p{IsUpper}])'), r'\1\n\2', text, regex.UNICODE)
 
 	# add breaks for sentences that end with some sort of punctuation are followed by a sentence starter punctuation and upper case
-    text = regex.sub (subst_char_class(r'([?!\.]) +([\'\"\(\[\¿\¡\p{IsPi}]+[\ ]*[\p{IsUpper}])'), '\1\n\2', text, regex.UNICODE)
+    text = regex.sub (subst_char_class(r'([?!\.]) +([\'\"\(\[\¿\¡\p{IsPi}]+[\ ]*[\p{IsUpper}])'), r'\1\n\2', text, regex.UNICODE)
 
 	# special punctuation cases are covered. Check all remaining periods.
     words = text.split(' ')
@@ -188,16 +165,13 @@ def preprocess(text):
 				#not breaking - upper case acronym
             elif  regex.match(subst_char_class(r'^([ ]*[\'\"\(\[\¿\¡\p{IsPi}]*[ ]*[\p{IsUpper}0-9])'), words[i+1], regex.UNICODE):
 				#the next word has a bunch of initial quotes, maybe a space, then either upper case or a number
-                if prefix and NONBREAKING_PREFIX.get(prefix, 0) == 2 and not starting_punct and (regex.match('^[0-9]+', words[i+1])):
+                if prefix and NONBREAKING_PREFIX.get(prefix, 0) == 2 and not starting_punct and (regex.match(r'^[0-9]+', words[i+1])):
                     pass
                 else:
                     words[i] = words[i] + "\n"
 				#we always add a return for these unless we have a numeric non-breaker and a number start
 
-
-
         text += words[i] + " "
-
 
 	#we stopped one token from the end to allow for easy look-ahead. Append it now.
     text += words[-1]
@@ -215,7 +189,30 @@ def preprocess(text):
 
     return text
 
+
+def get_command_args():
+   parser = argparse.ArgumentParser(description='Split a text into sentences.')
+   parser.add_argument('--quiet', '-q', help='Be quiet', action='store_true')
+   parser.add_argument('--language', '-l', default='en', metavar='en|fr|ru|ja|...',
+                  type=str, help='Sets the language of the input text. English is default.')
+   parser.add_argument('--infile', '-i', help='Input file name', required=True)
+   parser.add_argument('--outfile', '-o', help='Output file name')
+
+   res = parser.parse_args()
+   return res.language, res.quiet, res.infile, res.outfile
+
+def main():
+   language, quite, infile, outfile = get_command_args()
+   splitter = SentenceSplitter(language)
+   text = splitter.process_file(infile)
+   if outfile is None or len(outfile) == 0:
+      print(text)
+   else:
+      with open(outfile, mode='w', encoding='utf8') as file:
+         file.write(text)
+
+
 if __name__ == '__main__':
-    file_name = '1.txt'
-    process_file()
+    main()
+
 
