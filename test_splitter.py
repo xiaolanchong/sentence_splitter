@@ -33,8 +33,21 @@ class TestSplitter(unittest.TestCase):
 
     def testKorean(self):
         text_src = '1년 만에 완전체로. 돌아온 크레용팝의. 두 번째 미니앨범 ‘FM’!'
-        text_exp = ''
+        text_exp = '1년 만에 완전체로.\n돌아온 크레용팝의.\n두 번째 미니앨범 ‘FM’!\n'
         res = self.en_splitter.process_string(text_src)
+        self.assertEqual(res, text_exp)
+
+    def testChinese(self):
+        text_src = '父亲说：“这得说说……” “是得说说。”娘说。说说，什么叫“说说”，说什么呢？'
+        text_exp = '父亲说：“这得说说……” “是得说说。\n”娘说。\n说说，什么叫“说说”，说什么呢？\n'
+        res = self.en_splitter.process_string(text_src)
+        self.assertEqual(res, text_exp)
+
+    def testJapanese(self):
+        text_src = '『ハア。』と老女は當惑した樣に眼をしよぼつかせた。『無い筈はないでせう。尤も此邊では、戸籍上の名と家で呼ぶ名と違ふのがありますよ。』と、健は喙を容れた。'
+        text_exp = '『ハア。\n』と老女は當惑した樣に眼をしよぼつかせた。\n『無い筈はないでせう。\n尤も此邊では、戸籍上の名と家で呼ぶ名と違ふのがありますよ。\n』と、健は喙を容れた。\n'
+        res = self.en_splitter.process_string(text_src)
+        #print(res)
         self.assertEqual(res, text_exp)
 
 if __name__ == '__main__':

@@ -3,41 +3,14 @@
 import sys
 import os.path
 import argparse
-import regex  # [:upper:]
-
-no_capital_letters = frozenset([''])
-
-pIsPi = \
- '\u000AB' +\
- '\u02018' +\
- '\u0201B' +\
- '\u0201C' +\
- '\u0201F' +\
- '\u02039' +\
- '\u02E02' +\
- '\u02E04' +\
- '\u02E09' +\
- '\u02E0C' +\
- '\u02E1C' +\
- '\u02E20'
-
-pIsPf = \
- '\u000BB' +\
-'\u02019' +\
-'\u0201D' +\
-'\u0203A' +\
-'\u02E03' +\
-'\u02E05' +\
-'\u02E0A' +\
-'\u02E0D' +\
-'\u02E1D' +\
-'\u02E21'
+import regex  # supports POSIX classes
 
 def subst_char_class(rule):
-   rule = rule.replace(r'\p{IsPf}', pIsPf)
-   rule = rule.replace(r'\p{IsPi}', pIsPi)
-   rule = rule.replace(r'\p{IsAlnum}', r'[:alnum:]')
-   rule = rule.replace(r'\p{IsUpper}', r'[:upper:]')
+   #return rule
+   rule = rule.replace(r'\p{IsPi}', r'\p{Initial_Punctuation}')
+   rule = rule.replace(r'\p{IsPf}', r'\p{Final_Punctuation}')
+   rule = rule.replace(r'\p{IsAlnum}', r'\w')
+   rule = rule.replace(r'\p{IsUpper}', r'\p{Uppercase_Letter}\p{Other_Letter}')
    return rule
     #res
 
@@ -148,6 +121,8 @@ def preprocess(text, NONBREAKING_PREFIX):
 	# add breaks for sentences that end with some sort of punctuation are followed by a sentence starter punctuation and upper case
     text = regex.sub (subst_char_class(r'([?!\.]) +([\'\"\(\[\¿\¡\p{IsPi}]+[\ ]*[\p{IsUpper}])'), r'\1\n\2', text, regex.UNICODE)
 
+    text = regex.sub (subst_char_class(r'。'), r'。\n', text, regex.UNICODE)
+
 	# special punctuation cases are covered. Check all remaining periods.
     words = text.split(' ')
     text = "";
@@ -160,7 +135,7 @@ def preprocess(text, NONBREAKING_PREFIX):
             if prefix and NONBREAKING_PREFIX.get(prefix) == 1 and not starting_punct:
 				#not breaking;
                 pass
-            elif regex.match(subst_char_class(r'(\.)[\p{IsUpper}\-]+(\.+)$'), words[i], regex.UNICODE):
+            elif regex.match(subst_char_class(r'[\.][\p{IsUpper}\-]+(\.+)$'), words[i], regex.UNICODE):
                 pass
 				#not breaking - upper case acronym
             elif  regex.match(subst_char_class(r'^([ ]*[\'\"\(\[\¿\¡\p{IsPi}]*[ ]*[\p{IsUpper}0-9])'), words[i+1], regex.UNICODE):
@@ -177,14 +152,14 @@ def preprocess(text, NONBREAKING_PREFIX):
     text += words[-1]
 
 	# clean up spaces at head and tail of each line as well as any double-spacing
-    text = regex.sub(' +', ' ', text)
-    text = regex.sub('\n ', '\n', text)
-    text = regex.sub(' \n', '\n', text)
-    text = regex.sub('^ ', '', text)
-    text = regex.sub(' $', '', text)
+    text = regex.sub(r' +', ' ', text)
+    text = regex.sub(r'\n ', '\n', text)
+    text = regex.sub(r' \n', '\n', text)
+    text = regex.sub(r'^ ', '', text)
+    text = regex.sub(r' $', '', text)
 
 	#add trailing break
-    if not regex.match('\n$', text):
+    if len(text) != 0 and text[-1] != '\n':
         text += "\n"
 
     return text
