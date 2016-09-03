@@ -1,17 +1,14 @@
 # -*- coding: utf-8 -*-
 
-import os.path
 import unittest
-import sys
-from pprint import pprint
-from splitter import SentenceSplitter
+from splitter import SentenceSplitter, get_command_args
+
 
 class TestSplitter(unittest.TestCase):
     def setUp(self):
         self.maxDiff = None
         self.test_number = 0
         self.en_splitter = SentenceSplitter('en')
-        #self.en_splitter = SentenceSplitter('en')
 
     def testSimpleEng(self):
         text_src = 'Mr Dursley was the director. Of a firm called . Grunnings, which made drills.'
@@ -49,6 +46,20 @@ class TestSplitter(unittest.TestCase):
         res = self.en_splitter.process_string(text_src)
         #print(res)
         self.assertEqual(res, text_exp)
+
+    def testCommandLine(self):
+        language, quiet, infile, outfile = get_command_args(['inputfile.txt'])
+        self.assertEqual('en', language)
+        self.assertFalse(quiet)
+        self.assertEqual('inputfile.txt', infile)
+        self.assertIsNone(outfile)
+
+        language, quiet, infile, outfile = get_command_args(['-l', 'ru', 'infile.txt', 'outfile.txt'])
+        self.assertEqual('ru', language)
+        self.assertFalse(quiet)
+        self.assertEqual('infile.txt', infile)
+        self.assertEqual('outfile.txt', outfile)
+
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSplitter)
